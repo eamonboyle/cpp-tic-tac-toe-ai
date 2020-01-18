@@ -1,0 +1,5 @@
+﻿  Beginning C++ Game Programming.cpp
+F:\Coding\CPP\Beginning C++ Game Programming\Beginning C++ Game Programming\Beginning C++ Game Programming.cpp(207,26): warning C4018: '<': signed/unsigned mismatch
+F:\Coding\CPP\Beginning C++ Game Programming\Beginning C++ Game Programming\Beginning C++ Game Programming.cpp(228,26): warning C4018: '<': signed/unsigned mismatch
+F:\Coding\CPP\Beginning C++ Game Programming\Beginning C++ Game Programming\Beginning C++ Game Programming.cpp(249,20): warning C4018: '<': signed/unsigned mismatch
+  Beginning C++ Game Programming.vcxproj -> F:\Coding\CPP\Beginning C++ Game Programming\Debug\Beginning C++ Game Programming.exe
