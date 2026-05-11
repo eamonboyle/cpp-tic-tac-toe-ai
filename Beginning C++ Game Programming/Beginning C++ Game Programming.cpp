@@ -11,6 +11,7 @@
 #include <sstream>
 #include <string>
 #include <unordered_map>
+#include <utility>
 #include <vector>
 
 using namespace std;
@@ -31,15 +32,16 @@ int askNumber(const string& question, int high, int low = 0);
 char humanPiece();
 char opponent(char piece);
 
-void displayBoard(const vector<char>& board);
+void clearTerminal();
+void displayBoard(const vector<char>& board, const string& headline = string(), bool clearFirst = true);
 char winner(const vector<char>& board);
 
 bool isLegal(const vector<char>& board, int move);
 int humanMove(const vector<char>& board, char /*human*/);
 int computerMoveHeuristic(vector<char> board, char computer);
-int computerMoveQLearning(vector<char> board, char /*computer*/, QTable& qTable);
+pair<int, string> computerMoveQLearning(vector<char> board, char /*computer*/, QTable& qTable);
 
-void announceWinner(char result, char computer, char human);
+void announceWinner(char result, char computer, char human, const vector<char>& board);
 
 string boardKey(const vector<char>& board);
 char sideToMove(const vector<char>& board);
@@ -157,14 +159,14 @@ void instructions()
 	cout << "Welcome to the ultimate man-machine showdown: Tic-Tac-Toe.\n";
 	cout << " -- where human brain is pit against silicon processor\n\n";
 
-	cout << "Make your move known by entering a number, 0-8. The number\n";
-	cout << "corresponds to the desired board position, as illustrated:\n\n";
+	cout << "Make your move known by entering a number, 1-9. Each number\n";
+	cout << "matches one square on the board, as illustrated:\n\n";
 
-	cout << "     0 | 1 | 2\n";
+	cout << "     1 | 2 | 3\n";
 	cout << "     ---------\n";
-	cout << "     3 | 4 | 5\n";
+	cout << "     4 | 5 | 6\n";
 	cout << "     ---------\n";
-	cout << "     6 | 7 | 8\n\n";
+	cout << "     7 | 8 | 9\n\n";
 
 	cout << "Prepare yourself, human. The battle is about to begin.\n\n";
 }
@@ -218,14 +220,35 @@ char opponent(char piece)
 	return X;
 }
 
-void displayBoard(const vector<char>& board)
+void clearTerminal()
 {
+	cout << "\033[2J\033[H" << flush;
+}
+
+void displayBoard(const vector<char>& board, const string& headline, bool clearFirst)
+{
+	if (clearFirst)
+		clearTerminal();
+	if (!headline.empty())
+		cout << headline << "\n\n";
+
+	auto cellPlay = [&board](int i) -> char {
+		return board[static_cast<size_t>(i)] == EMPTY ? '-' : board[static_cast<size_t>(i)];
+	};
+
 	cout << "\n-----------------------------------------------------\n";
-	cout << "\n\t" << board[0] << " | " << board[1] << " | " << board[2];
+	cout << "\n\t" << cellPlay(0) << " | " << cellPlay(1) << " | " << cellPlay(2);
 	cout << "\n\t" << "---------";
-	cout << "\n\t" << board[3] << " | " << board[4] << " | " << board[5];
+	cout << "\n\t" << cellPlay(3) << " | " << cellPlay(4) << " | " << cellPlay(5);
 	cout << "\n\t" << "---------";
-	cout << "\n\t" << board[6] << " | " << board[7] << " | " << board[8] << "         ";
+	cout << "\n\t" << cellPlay(6) << " | " << cellPlay(7) << " | " << cellPlay(8) << "         ";
+	cout << "\n\n\tMove key (type 1–9):\n";
+	cout << "\n\t" << "1 | 2 | 3";
+	cout << "\n\t" << "---------";
+	cout << "\n\t" << "4 | 5 | 6";
+	cout << "\n\t" << "---------";
+	cout << "\n\t" << "7 | 8 | 9\n";
+	cout.flush();
 }
 
 char winner(const vector<char>& board)
@@ -266,23 +289,21 @@ bool isLegal(const vector<char>& board, int move)
 
 int humanMove(const vector<char>& board, char /*human*/)
 {
-	int move = askNumber("Where will you move?", static_cast<int>(board.size()) - 1);
+	int key = askNumber("Where will you move? (1-9 from the key below)", 9, 1);
+	int move = key - 1;
 
 	while (!isLegal(board, move))
 	{
-		cout << "\nThat square is already occupied, foolish human.\n";
-		move = askNumber("Where will you move?", static_cast<int>(board.size()) - 1);
+		displayBoard(board, "That square is taken — choose another key 1–9.");
+		key = askNumber("Where will you move? (1-9 from the key below)", 9, 1);
+		move = key - 1;
 	}
-
-	cout << "Fine...\n";
 
 	return move;
 }
 
 int computerMoveHeuristic(vector<char> board, char computer)
 {
-	cout << "I shall take square number ";
-
 	for (size_t move = 0; move < board.size(); ++move)
 	{
 		if (isLegal(board, static_cast<int>(move)))
@@ -290,10 +311,7 @@ int computerMoveHeuristic(vector<char> board, char computer)
 			board[move] = computer;
 
 			if (winner(board) == computer)
-			{
-				cout << move << endl;
 				return static_cast<int>(move);
-			}
 
 			board[move] = EMPTY;
 		}
@@ -308,10 +326,7 @@ int computerMoveHeuristic(vector<char> board, char computer)
 			board[move] = human;
 
 			if (winner(board) == human)
-			{
-				cout << move << endl;
 				return static_cast<int>(move);
-			}
 
 			board[move] = EMPTY;
 		}
@@ -324,17 +339,17 @@ int computerMoveHeuristic(vector<char> board, char computer)
 		int move = BEST_MOVES[i];
 
 		if (isLegal(board, move))
-		{
-			cout << move << endl;
 			return move;
-		}
 	}
 
 	return 0;
 }
 
-void announceWinner(char result, char computer, char human)
+void announceWinner(char result, char computer, char human, const vector<char>& board)
 {
+	clearTerminal();
+	displayBoard(board, "Game over.", false);
+
 	if (result == computer)
 	{
 		cout << computer << "'s won!\n";
@@ -483,10 +498,8 @@ void trainSelfPlay(QTable& q, int episodes, double alpha, double gamma, mt19937&
 	cout << "\n";
 }
 
-int computerMoveQLearning(vector<char> board, char /*computer*/, QTable& qTable)
+pair<int, string> computerMoveQLearning(vector<char> board, char /*computer*/, QTable& qTable)
 {
-	cout << "I shall take square number ";
-
 	string state = boardKey(board);
 	vector<int> legal;
 	for (int i = 0; i < 9; ++i)
@@ -499,8 +512,7 @@ int computerMoveQLearning(vector<char> board, char /*computer*/, QTable& qTable)
 		mt19937 rng(random_device{}());
 		uniform_int_distribution<size_t> pick(0, legal.size() - 1);
 		int m = legal[pick(rng)];
-		cout << m << " (random — state unseen)\n";
-		return m;
+		return { m, " (random pick — state unseen in Q-table)" };
 	}
 
 	double best = -1e100;
@@ -521,8 +533,7 @@ int computerMoveQLearning(vector<char> board, char /*computer*/, QTable& qTable)
 	mt19937 rng(random_device{}());
 	uniform_int_distribution<size_t> tie(0, bestMoves.size() - 1);
 	int choice = bestMoves[tie(rng)];
-	cout << choice << endl;
-	return choice;
+	return { choice, string() };
 }
 
 static string boardKeyToToken(const string& key)
@@ -613,7 +624,7 @@ void playVersusComputer(bool useLearned, QTable& q)
 	char human = humanPiece();
 	char computer = opponent(human);
 	char turn = X;
-	displayBoard(board);
+	displayBoard(board, "Game on.");
 
 	while (winner(board) == NO_ONE)
 	{
@@ -622,19 +633,27 @@ void playVersusComputer(bool useLearned, QTable& q)
 		{
 			move = humanMove(board, human);
 			board[static_cast<size_t>(move)] = human;
+			displayBoard(board, "Your move is in.");
 		}
 		else
 		{
+			string computerNote;
 			if (useLearned)
-				move = computerMoveQLearning(board, computer, q);
+			{
+				auto chosen = computerMoveQLearning(board, computer, q);
+				move = chosen.first;
+				computerNote = chosen.second;
+			}
 			else
 				move = computerMoveHeuristic(board, computer);
+
 			board[static_cast<size_t>(move)] = computer;
+			displayBoard(board,
+				string("Computer plays key ") + to_string(move + 1) + "." + computerNote);
 		}
 
-		displayBoard(board);
 		turn = opponent(turn);
 	}
 
-	announceWinner(winner(board), computer, human);
+	announceWinner(winner(board), computer, human, board);
 }
