@@ -62,80 +62,91 @@ int main()
 	QTable qTable;
 	const string defaultSavePath = "ttt_qlearn.txt";
 
-	cout << "\n=== Tic-Tac-Toe ===\n";
-	cout << "1) Play vs heuristic AI (original rule-based)\n";
-	cout << "2) Play vs Q-learning AI (train first if new)\n";
-	cout << "3) Train Q-learning AI with self-play (no human labels)\n";
-	cout << "4) Save learned Q-table to file\n";
-	cout << "5) Load Q-table from file\n";
-
-	int choice = askNumber("Menu choice", 5, 1);
-
-	switch (choice)
+	for (;;)
 	{
-	case 1:
-		playVersusComputer(false, qTable);
-		break;
-	case 2:
-		if (qTable.empty())
+		cout << "\n=== Tic-Tac-Toe ===\n";
+		cout << "0) Quit\n";
+		cout << "1) Play vs heuristic AI (original rule-based)\n";
+		cout << "2) Play vs Q-learning AI (train first if new)\n";
+		cout << "3) Train Q-learning AI with self-play (no human labels)\n";
+		cout << "4) Save learned Q-table to file\n";
+		cout << "5) Load Q-table from file\n";
+
+		int choice = askNumber("Menu choice", 5, 0);
+		if (choice == 0)
+			break;
+
+		switch (choice)
 		{
-			if (askYesNo("\nNo Q-table in memory. Train now?") == 'y')
+		case 1:
+			playVersusComputer(false, qTable);
+			break;
+		case 2:
+			if (qTable.empty())
 			{
-				int ep = askNumber("Self-play episodes", 500000, 1000);
-				auto t0 = chrono::steady_clock::now();
-				trainSelfPlay(qTable, ep, 0.2, 1.0, rng);
-				auto ms = chrono::duration_cast<chrono::milliseconds>(
-					chrono::steady_clock::now() - t0).count();
-				cout << "Training finished in " << ms << " ms; states learned: "
-					<< qTable.size() << "\n";
+				if (askYesNo("\nNo Q-table in memory. Train now?") == 'y')
+				{
+					int ep = askNumber("Self-play episodes", 500000, 1000);
+					auto t0 = chrono::steady_clock::now();
+					trainSelfPlay(qTable, ep, 0.2, 1.0, rng);
+					auto ms = chrono::duration_cast<chrono::milliseconds>(
+						chrono::steady_clock::now() - t0).count();
+					cout << "Training finished in " << ms << " ms; states learned: "
+						<< qTable.size() << "\n";
+				}
 			}
+			playVersusComputer(true, qTable);
+			break;
+		case 3:
+		{
+			int ep = askNumber("Self-play episodes", 1000000, 1000);
+			auto t0 = chrono::steady_clock::now();
+			trainSelfPlay(qTable, ep, 0.2, 1.0, rng);
+			auto ms = chrono::duration_cast<chrono::milliseconds>(
+				chrono::steady_clock::now() - t0).count();
+			cout << "Done in " << ms << " ms; distinct states: " << qTable.size() << "\n";
+			ostringstream savePrompt;
+			savePrompt << "Save to \"" << defaultSavePath << "\"?";
+			if (askYesNo(savePrompt.str()) == 'y')
+			{
+				if (saveQTable(defaultSavePath, qTable))
+					cout << "Saved " << qTable.size() << " states.\n";
+				else
+					cout << "Save failed.\n";
+			}
+			break;
 		}
-		playVersusComputer(true, qTable);
-		break;
-	case 3:
-	{
-		int ep = askNumber("Self-play episodes", 1000000, 1000);
-		auto t0 = chrono::steady_clock::now();
-		trainSelfPlay(qTable, ep, 0.2, 1.0, rng);
-		auto ms = chrono::duration_cast<chrono::milliseconds>(
-			chrono::steady_clock::now() - t0).count();
-		cout << "Done in " << ms << " ms; distinct states: " << qTable.size() << "\n";
-		ostringstream savePrompt;
-		savePrompt << "Save to \"" << defaultSavePath << "\"?";
-		if (askYesNo(savePrompt.str()) == 'y')
-			saveQTable(defaultSavePath, qTable);
-		break;
-	}
-	case 4:
-	{
-		cout << "File path [" << defaultSavePath << "]: ";
-		string path;
-		cin.ignore();
-		getline(cin, path);
-		if (path.empty())
-			path = defaultSavePath;
-		if (saveQTable(path, qTable))
-			cout << "Saved " << qTable.size() << " states.\n";
-		else
-			cout << "Save failed.\n";
-		break;
-	}
-	case 5:
-	{
-		cout << "File path [" << defaultSavePath << "]: ";
-		string path;
-		cin.ignore();
-		getline(cin, path);
-		if (path.empty())
-			path = defaultSavePath;
-		if (loadQTable(path, qTable))
-			cout << "Loaded " << qTable.size() << " states.\n";
-		else
-			cout << "Load failed.\n";
-		break;
-	}
-	default:
-		break;
+		case 4:
+		{
+			cout << "File path [" << defaultSavePath << "]: ";
+			string path;
+			cin.ignore();
+			getline(cin, path);
+			if (path.empty())
+				path = defaultSavePath;
+			if (saveQTable(path, qTable))
+				cout << "Saved " << qTable.size() << " states.\n";
+			else
+				cout << "Save failed.\n";
+			break;
+		}
+		case 5:
+		{
+			cout << "File path [" << defaultSavePath << "]: ";
+			string path;
+			cin.ignore();
+			getline(cin, path);
+			if (path.empty())
+				path = defaultSavePath;
+			if (loadQTable(path, qTable))
+				cout << "Loaded " << qTable.size() << " states.\n";
+			else
+				cout << "Load failed.\n";
+			break;
+		}
+		default:
+			break;
+		}
 	}
 
 	return 0;
