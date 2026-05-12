@@ -4,15 +4,24 @@
 #include <algorithm>
 #include <array>
 #include <chrono>
+#include <cctype>
+#include <cmath>
 #include <fstream>
 #include <iomanip>
 #include <iostream>
+#include <limits>
 #include <random>
 #include <sstream>
 #include <string>
 #include <unordered_map>
 #include <utility>
 #include <vector>
+
+#ifdef _WIN32
+#include <io.h>
+#else
+#include <unistd.h>
+#endif
 
 using namespace std;
 
@@ -39,7 +48,8 @@ char winner(const vector<char>& board);
 bool isLegal(const vector<char>& board, int move);
 int humanMove(const vector<char>& board, char /*human*/);
 int computerMoveHeuristic(vector<char> board, char computer);
-pair<int, string> computerMoveQLearning(vector<char> board, char /*computer*/, QTable& qTable);
+pair<int, string> computerMoveQLearning(vector<char> board, char /*computer*/, QTable& qTable,
+	mt19937& rng);
 
 void announceWinner(char result, char computer, char human, const vector<char>& board);
 
@@ -54,7 +64,7 @@ void trainSelfPlay(QTable& q, int episodes, double alpha, double gamma, mt19937&
 bool saveQTable(const string& path, const QTable& q);
 bool loadQTable(const string& path, QTable& q);
 
-void playVersusComputer(bool useLearned, QTable& q);
+void playVersusComputer(bool useLearned, QTable& q, mt19937& rng);
 
 int main()
 {
@@ -81,7 +91,7 @@ int main()
 		switch (choice)
 		{
 		case 1:
-			playVersusComputer(false, qTable);
+			playVersusComputer(false, qTable, rng);
 			break;
 		case 2:
 			if (qTable.empty())
@@ -97,7 +107,7 @@ int main()
 						<< qTable.size() << "\n";
 				}
 			}
-			playVersusComputer(true, qTable);
+			playVersusComputer(true, qTable, rng);
 			break;
 		case 3:
 		{
@@ -122,7 +132,7 @@ int main()
 		{
 			cout << "File path [" << defaultSavePath << "]: ";
 			string path;
-			cin.ignore();
+			cin >> ws;
 			getline(cin, path);
 			if (path.empty())
 				path = defaultSavePath;
@@ -136,7 +146,7 @@ int main()
 		{
 			cout << "File path [" << defaultSavePath << "]: ";
 			string path;
-			cin.ignore();
+			cin >> ws;
 			getline(cin, path);
 			if (path.empty())
 				path = defaultSavePath;
@@ -173,30 +183,49 @@ void instructions()
 
 char askYesNo(const string& question)
 {
-	char response = ' ';
+	string line;
 
-	do
+	for (;;)
 	{
 		if (!question.empty())
 			cout << question;
 		cout << " (y/n): ";
-		cin >> response;
-	} while (response != 'y' && response != 'n');
+		if (!getline(cin, line))
+			return 'n';
 
-	return response;
+		const auto start = line.find_first_not_of(" \t\r\n");
+		if (start == string::npos)
+			continue;
+
+		const unsigned char uc = static_cast<unsigned char>(line[start]);
+		const char c = static_cast<char>(tolower(uc));
+		if (c == 'y' || c == 'n')
+			return c;
+
+		cout << "Please type y or n.\n";
+	}
 }
 
 int askNumber(const string& question, int high, int low)
 {
-	int number = low - 1;
-
-	do
+	for (;;)
 	{
 		cout << question << " (" << low << "-" << high << "): ";
-		cin >> number;
-	} while (number > high || number < low);
-
-	return number;
+		int number = 0;
+		if (cin >> number)
+		{
+			cin.ignore(numeric_limits<streamsize>::max(), '\n');
+			if (number >= low && number <= high)
+				return number;
+			cout << "Out of range.\n";
+		}
+		else
+		{
+			cout << "Please enter a valid integer.\n";
+			cin.clear();
+			cin.ignore(numeric_limits<streamsize>::max(), '\n');
+		}
+	}
 }
 
 char humanPiece()
@@ -222,6 +251,13 @@ char opponent(char piece)
 
 void clearTerminal()
 {
+#ifdef _WIN32
+	const bool tty = _isatty(_fileno(stdout)) != 0;
+#else
+	const bool tty = isatty(STDOUT_FILENO) != 0;
+#endif
+	if (!tty)
+		return;
 	cout << "\033[2J\033[H" << flush;
 }
 
@@ -443,7 +479,7 @@ int pickEpsilonGreedy(const vector<char>& board, const string& state, QTable& q,
 			bestMoves.clear();
 			bestMoves.push_back(a);
 		}
-		else if (abs(v - best) <= 1e-12)
+		else if (fabs(v - best) <= 1e-12)
 			bestMoves.push_back(a);
 	}
 
@@ -498,7 +534,8 @@ void trainSelfPlay(QTable& q, int episodes, double alpha, double gamma, mt19937&
 	cout << "\n";
 }
 
-pair<int, string> computerMoveQLearning(vector<char> board, char /*computer*/, QTable& qTable)
+pair<int, string> computerMoveQLearning(vector<char> board, char /*computer*/, QTable& qTable,
+	mt19937& rng)
 {
 	string state = boardKey(board);
 	vector<int> legal;
@@ -509,9 +546,8 @@ pair<int, string> computerMoveQLearning(vector<char> board, char /*computer*/, Q
 	auto it = qTable.find(state);
 	if (it == qTable.end())
 	{
-		mt19937 rng(random_device{}());
 		uniform_int_distribution<size_t> pick(0, legal.size() - 1);
-		int m = legal[pick(rng)];
+		const int m = legal[pick(rng)];
 		return { m, " (random pick — state unseen in Q-table)" };
 	}
 
@@ -519,20 +555,19 @@ pair<int, string> computerMoveQLearning(vector<char> board, char /*computer*/, Q
 	vector<int> bestMoves;
 	for (int a : legal)
 	{
-		double v = it->second[static_cast<size_t>(a)];
+		const double v = it->second[static_cast<size_t>(a)];
 		if (v > best + 1e-12)
 		{
 			best = v;
 			bestMoves.clear();
 			bestMoves.push_back(a);
 		}
-		else if (abs(v - best) <= 1e-12)
+		else if (fabs(v - best) <= 1e-12)
 			bestMoves.push_back(a);
 	}
 
-	mt19937 rng(random_device{}());
 	uniform_int_distribution<size_t> tie(0, bestMoves.size() - 1);
-	int choice = bestMoves[tie(rng)];
+	const int choice = bestMoves[tie(rng)];
 	return { choice, string() };
 }
 
@@ -615,7 +650,7 @@ bool loadQTable(const string& path, QTable& q)
 	return true;
 }
 
-void playVersusComputer(bool useLearned, QTable& q)
+void playVersusComputer(bool useLearned, QTable& q, mt19937& rng)
 {
 	const int NUM_SQUARES = 9;
 	vector<char> board(NUM_SQUARES, EMPTY);
@@ -640,7 +675,7 @@ void playVersusComputer(bool useLearned, QTable& q)
 			string computerNote;
 			if (useLearned)
 			{
-				auto chosen = computerMoveQLearning(board, computer, q);
+				auto chosen = computerMoveQLearning(board, computer, q, rng);
 				move = chosen.first;
 				computerNote = chosen.second;
 			}
