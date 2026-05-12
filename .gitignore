@@ -32,3 +32,7 @@
 *.app
 
 /.vs
+
+# Local builds / learned model artifacts
+/tictactoe
+ttt_qlearn.txt
